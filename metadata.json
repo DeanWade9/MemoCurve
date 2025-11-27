@@ -1,0 +1,5 @@
+{
+  "name": "MemoCurve - Ebbinghaus Flashcards",
+  "description": "A scientific memory aid application leveraging the Ebbinghaus Forgetting Curve to optimize flashcard reviews. Features AI-generated questions, progress tracking, and flexible data management.",
+  "requestFramePermissions": []
+}
