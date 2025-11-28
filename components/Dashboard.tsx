@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { Flashcard, EBBINGHAUS_INTERVALS_MINUTES, ViewMode } from '../types';
 import { generateReviewSchedule } from '../services/ebbinghaus';
-import { Plus, Upload, Trash2, Search, Play, Download } from 'lucide-react';
+import { Plus, Upload, Trash2, Search, Play, Download, Bell, BellOff } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface DashboardProps {
@@ -11,9 +11,18 @@ interface DashboardProps {
   onDeleteCards: (ids: string[]) => void;
   onStartReview: () => void;
   onUpdateCard: (card: Flashcard) => void;
+  onEnableNotifications: () => void;
+  notificationStatus: NotificationPermission;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ cards, onAddCard, onDeleteCards, onStartReview, onUpdateCard }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ 
+    cards, 
+    onAddCard, 
+    onDeleteCards, 
+    onStartReview, 
+    onEnableNotifications,
+    notificationStatus 
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -137,8 +146,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ cards, onAddCard, onDelete
         
         <div className="flex flex-wrap gap-2">
            <button 
+             onClick={onEnableNotifications}
+             className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
+               notificationStatus === 'granted' 
+               ? 'bg-slate-50 text-green-600 border-green-200 cursor-default' 
+               : notificationStatus === 'denied'
+                 ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                 : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+             }`}
+             disabled={notificationStatus === 'granted'}
+             title={
+               notificationStatus === 'granted' ? 'Notifications Active' : 
+               notificationStatus === 'denied' ? 'Notifications Blocked - Click to see how to fix' : 
+               'Enable Reminders'
+             }
+           >
+             {notificationStatus === 'granted' ? <Bell size={18} /> : (notificationStatus === 'denied' ? <BellOff size={18} /> : <Bell size={18} />)}
+             <span className="hidden sm:inline">
+               {notificationStatus === 'granted' ? 'Reminders On' : (notificationStatus === 'denied' ? 'Reminders Blocked' : 'Enable Reminders')}
+             </span>
+           </button>
+
+           <div className="w-px h-8 bg-slate-300 mx-2 hidden md:block"></div>
+
+           <button 
              onClick={onStartReview}
-             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 shadow-md transition-all"
+             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 shadow-md transition-all animate-in zoom-in duration-300"
            >
              <Play size={18} fill="currentColor" /> Start Review
            </button>
@@ -163,31 +196,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ cards, onAddCard, onDelete
 
       {/* Manual Add Form */}
       {isAdding && (
-        <form onSubmit={handleManualAdd} className="bg-slate-50 p-6 rounded-xl border border-indigo-100 mb-8 animate-in fade-in slide-in-from-top-4">
+        <form onSubmit={handleManualAdd} className="bg-slate-50 p-6 rounded-xl border border-indigo-100 mb-8 animate-in fade-in slide-in-from-top-4 shadow-sm">
            <h3 className="font-semibold text-slate-700 mb-4">Add New Card</h3>
            <div className="grid md:grid-cols-3 gap-4 mb-4">
               <input 
-                 className="border p-2 rounded" 
+                 className="border p-2 rounded focus:ring-2 focus:ring-indigo-500 outline-none" 
                  placeholder="Content (Word/Phrase) *" 
                  value={newContent}
                  onChange={e => setNewContent(e.target.value)}
                  required 
               />
               <input 
-                 className="border p-2 rounded" 
+                 className="border p-2 rounded focus:ring-2 focus:ring-indigo-500 outline-none" 
                  placeholder="Meaning" 
                  value={newMeaning}
                  onChange={e => setNewMeaning(e.target.value)}
               />
               <input 
-                 className="border p-2 rounded" 
+                 className="border p-2 rounded focus:ring-2 focus:ring-indigo-500 outline-none" 
                  placeholder="Example Sentence" 
                  value={newExample}
                  onChange={e => setNewExample(e.target.value)}
               />
            </div>
            <div className="flex justify-end gap-2">
-             <button type="button" onClick={() => setIsAdding(false)} className="text-slate-500 px-4 py-2">Cancel</button>
+             <button type="button" onClick={() => setIsAdding(false)} className="text-slate-500 px-4 py-2 hover:bg-slate-200 rounded">Cancel</button>
              <button type="submit" className="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700">Save Card</button>
            </div>
         </form>
@@ -233,19 +266,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ cards, onAddCard, onDelete
                <tbody className="divide-y divide-slate-100">
                   {filteredCards.map(card => {
                       const isOverdue = card.nextScheduledReview < Date.now();
+                      const isCompleted = card.reviewCount >= 12;
                       return (
-                        <tr key={card.id} className="hover:bg-slate-50 group">
+                        <tr key={card.id} className="hover:bg-slate-50 group transition-colors">
                             <td className="p-4"><input type="checkbox" checked={selectedIds.has(card.id)} onChange={() => toggleSelect(card.id)} /></td>
                             <td className="p-4 font-medium text-slate-800">{card.content}</td>
                             <td className="p-4 text-slate-600 truncate max-w-[200px]">{card.meaning}</td>
                             <td className="p-4">
-                                <span className={`text-sm px-2 py-1 rounded-full ${isOverdue ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
-                                    {format(new Date(card.nextScheduledReview), 'MMM d, HH:mm')}
-                                </span>
+                                {isCompleted ? (
+                                    <span className="text-sm px-2 py-1 rounded-full bg-green-100 text-green-700 flex items-center w-fit gap-1">
+                                        <BellOff size={12} /> Done
+                                    </span>
+                                ) : (
+                                    <span className={`text-sm px-2 py-1 rounded-full ${isOverdue ? 'bg-red-100 text-red-700 font-bold' : 'bg-blue-100 text-blue-700'}`}>
+                                        {format(new Date(card.nextScheduledReview), 'MMM d, HH:mm')}
+                                    </span>
+                                )}
                             </td>
                             <td className="p-4">
                                 <div className="w-24 bg-slate-200 rounded-full h-2">
-                                    <div className="bg-green-500 h-2 rounded-full" style={{width: `${(card.reviewCount / 12) * 100}%`}}></div>
+                                    <div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{width: `${(card.reviewCount / 12) * 100}%`}}></div>
                                 </div>
                                 <span className="text-xs text-slate-400 mt-1 block">{card.reviewCount} / 12</span>
                             </td>
@@ -254,7 +294,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ cards, onAddCard, onDelete
                   })}
                   {filteredCards.length === 0 && (
                       <tr>
-                          <td colSpan={5} className="p-8 text-center text-slate-400">No cards found. Add some to get started!</td>
+                          <td colSpan={5} className="p-12 text-center text-slate-400">
+                              <p className="text-lg mb-2">No cards found</p>
+                              <p className="text-sm">Add some cards or import an Excel file to get started.</p>
+                          </td>
                       </tr>
                   )}
                </tbody>

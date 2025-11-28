@@ -14,6 +14,7 @@ const App: React.FC = () => {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.DASHBOARD);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -34,6 +35,11 @@ const App: React.FC = () => {
         console.error("Failed to parse config", e);
       }
     }
+
+    // Check notification permission status
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+    }
   }, []);
 
   // Save changes
@@ -44,6 +50,60 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
   }, [config]);
+
+  // Notification Worker
+  useEffect(() => {
+    if (notificationPermission !== 'granted') return;
+
+    const checkDueCards = () => {
+      const now = Date.now();
+      const dueCount = cards.filter(c => c.nextScheduledReview <= now).length;
+
+      if (dueCount > 0) {
+        new Notification("MemoCurve Reminder", {
+          body: `You have ${dueCount} flashcards due for review based on your Forgetting Curve!`,
+          icon: '/favicon.ico' // Assuming standard favicon
+        });
+      }
+    };
+
+    // Check every 60 seconds
+    const interval = setInterval(checkDueCards, 60000);
+    
+    // Initial check (after 5 seconds to not be annoying immediately on load)
+    const initialTimeout = setTimeout(checkDueCards, 5000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(initialTimeout);
+    };
+  }, [cards, notificationPermission]);
+
+  const requestNotificationAccess = async () => {
+    if (!('Notification' in window)) {
+      alert("This browser does not support desktop notifications");
+      return;
+    }
+
+    // Handle 'denied' state explicitly so the user knows why nothing is happening
+    if (Notification.permission === 'denied') {
+      alert("Notifications are currently blocked for this site.\n\nPlease click the 'Lock' icon or 'Settings' icon in your browser address bar (usually top left), find 'Notifications', and change it to 'Allow' or 'Ask'. Then refresh the page.");
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      
+      if (permission === 'granted') {
+        new Notification("MemoCurve", { body: "Notifications enabled! We'll remind you when reviews are due." });
+      } else if (permission === 'denied') {
+        alert("You blocked notifications. If you change your mind, you'll need to enable them in your browser settings.");
+      }
+    } catch (error) {
+      console.error("Error requesting notifications:", error);
+    }
+  };
 
   const handleAddCard = (card: Flashcard) => {
     setCards(prev => [...prev, card]);
@@ -64,7 +124,7 @@ const App: React.FC = () => {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center cursor-pointer" onClick={() => setViewMode(ViewMode.DASHBOARD)}>
-              <div className="bg-indigo-600 p-2 rounded-lg mr-3">
+              <div className="bg-indigo-600 p-2 rounded-lg mr-3 shadow-lg shadow-indigo-200">
                 <RotateCw className="text-white h-5 w-5" />
               </div>
               <span className="font-bold text-xl text-slate-800 tracking-tight">MemoCurve</span>
@@ -72,7 +132,7 @@ const App: React.FC = () => {
             
             <div className="flex items-center space-x-4">
               {viewMode === ViewMode.REVIEW && (
-                 <button onClick={() => setViewMode(ViewMode.DASHBOARD)} className="text-slate-500 hover:text-indigo-600 font-medium text-sm">
+                 <button onClick={() => setViewMode(ViewMode.DASHBOARD)} className="text-slate-500 hover:text-indigo-600 font-medium text-sm transition-colors">
                     Back to Dashboard
                  </button>
               )}
@@ -97,6 +157,8 @@ const App: React.FC = () => {
             onDeleteCards={handleDeleteCards}
             onStartReview={() => setViewMode(ViewMode.REVIEW)}
             onUpdateCard={handleUpdateCard}
+            onEnableNotifications={requestNotificationAccess}
+            notificationStatus={notificationPermission}
           />
         )}
 
